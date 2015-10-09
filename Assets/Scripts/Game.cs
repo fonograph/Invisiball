@@ -24,6 +24,7 @@ public class Game : MonoBehaviour {
 	public AudioClip ScoreSound;
 	public float accelTolerance;
 	public float gyroTolerance;
+	public float scoreLength;
 	public float cycleStartLength;
 	public float cycleIncreaseLength;
 	public float cyclePassLength;
@@ -137,7 +138,7 @@ public class Game : MonoBehaviour {
 	}
 
 	void OnPlayerFumble(Player player) {
-		StopCoroutine(scoreRoutine);
+		if ( scoreRoutine != null ) StopCoroutine(scoreRoutine);
 
 		// start ball cycle with randomized order
 
@@ -154,7 +155,7 @@ public class Game : MonoBehaviour {
 	}
 
 	void OnPlayerPass(Player player) {
-		StopCoroutine(scoreRoutine);
+		if ( scoreRoutine != null ) StopCoroutine(scoreRoutine);
 
 		// figure out who's closest in orientation, and start a cycle with that player
 		Player closest = null;
@@ -182,7 +183,8 @@ public class Game : MonoBehaviour {
 	}
 
 	void OnPlayerCatch(Player player) {
-		StopCoroutine(ballCycleRoutine);
+		if ( ballCycleRoutine != null ) StopCoroutine(ballCycleRoutine);
+
 		holdingPlayer = player;
 
 		Score(0);
@@ -224,7 +226,7 @@ public class Game : MonoBehaviour {
 			audioSource.PlayOneShot(ScoreSound);
 		}
 
-		scoreRoutine = WaitAndScore(2);
+		scoreRoutine = WaitAndScore(scoreLength);
 		StartCoroutine(scoreRoutine);
 	}
 

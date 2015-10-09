@@ -19,6 +19,7 @@ public class Player : MonoBehaviour {
 	private bool startedFumble;
 	private Vector3 lastAccel = Vector3.zero;
 	private Vector3 startOrientation;
+	private IEnumerator setLEDRoutine;
 
 
 	public event Action<Player> FumbleEvent;
@@ -128,24 +129,24 @@ public class Player : MonoBehaviour {
 		team = theTeam;
 		defaultColor = theTeam == 1 ? Game.Instance.TeamColor1 : Game.Instance.TeamColor2;
 
-		controller.SetLED(defaultColor);
+		SetLED(defaultColor);
 	}
 
 	// STATE
 
 	public void CycleBallOn() {
-		controller.SetLED(Game.Instance.CycleColor);
+		SetLED(Game.Instance.CycleColor);
 		hasCycle = true;
 		readyToCatch = false;
 	}
 
 	public void CycleBallOff() {
-		controller.SetLED(defaultColor);
+		SetLED(defaultColor);
 		hasCycle = false;
 	}
 
 	public void GainBall() {
-		controller.SetLED(Game.Instance.BallColor);
+		SetLED(Game.Instance.BallColor);
 		hasBall = true;
 		hasBallStart = DateTime.Now;
 		hasCycle = false;
@@ -155,13 +156,13 @@ public class Player : MonoBehaviour {
 	}
 
 	public void LoseBall() {
-		controller.SetLED(defaultColor);
+		SetLED(defaultColor);
 		hasBall = false;
 	}
 
 	public void Score(int points) {
-		controller.SetLED(Game.Instance.ScoreColor);
-		StartCoroutine(SetLEDDelayed(Game.Instance.BallColor, 0.2f));
+		SetLED(Game.Instance.ScoreColor);
+		SetLED(Game.Instance.BallColor, 0.2f);
 	}
 
 	// INTERNAL EVENTS
@@ -190,9 +191,24 @@ public class Player : MonoBehaviour {
 		return diff2.magnitude;
 	}
 
-	private IEnumerator SetLEDDelayed(Color color, float seconds) {
-		yield return new WaitForSeconds(seconds);
-		controller.SetLED(color);
+	private void SetLED(Color color) {
+		SetLED(color, null);
+	}
+
+	private void SetLED(Color color, float? delay) {
+		if ( delay != null ) {
+			setLEDRoutine = SetLEDCoroutine(color, (float)delay);
+			StartCoroutine(setLEDRoutine);
+		}
+		else {
+			if ( setLEDRoutine != null) StopCoroutine(setLEDRoutine);
+			controller.SetLED(color);
+		}
+	}
+
+	private IEnumerator SetLEDCoroutine(Color color, float seconds) {
+		yield return new WaitForSeconds(seconds); 
+		SetLED(color); 
 	}
 
 	private Vector3 normalizedOrientation(Vector3 o) {
