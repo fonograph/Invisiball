@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
+using System;
 using System.Threading;
 using System.Collections;
 using System.Collections.Generic;
@@ -11,6 +12,7 @@ public class Game : MonoBehaviour {
 	public Player playerPrefab;
 	public Text scoreText1;
 	public Text scoreText2;
+	public GameObject debugContainer;
 	public List<GameObject> controllerObjs;
 
 	public Color TeamColor1;
@@ -22,9 +24,12 @@ public class Game : MonoBehaviour {
 	public AudioClip FumbleSound;
 	public AudioClip PassSound;
 	public AudioClip ScoreSound;
+	public int gameLength;
 	public float accelTolerance;
 	public float gyroTolerance;
+	public float orientationSamenessThreshold;
 	public float scoreLength;
+	public float scoreDecreaseLengthBonus;
 	public float cycleStartLength;
 	public float cycleIncreaseLength;
 	public float cyclePassLength;
@@ -36,17 +41,21 @@ public class Game : MonoBehaviour {
 	public static Game Instance;
 
 	private AudioSource audioSource;
+	private Board board;
 
 	private List<Player> players;
 	private Dictionary<int, int> scores;
-	private Dictionary<int, Text> scoreTexts;
 
 	private Phase phase;
 
+	private float gameTime;
 	private Player holdingPlayer;
+	private Player lastHoldingPlayer;
 	private List<Player> playerCycle;
 	private int playerCycleIdx;
 	private int playerCycleCount;
+	private Dictionary<Player, float> playerCycleLengthOverride;
+	private float currentScoreLength;
 
 	private IEnumerator ballCycleRoutine;
 	private IEnumerator scoreRoutine;
@@ -58,6 +67,7 @@ public class Game : MonoBehaviour {
 	void Awake() {
 		Instance = this;
 		audioSource = GetComponent<AudioSource>();
+		board = FindObjectOfType<Board>();
 	}
 
 	void Start() {
@@ -67,12 +77,8 @@ public class Game : MonoBehaviour {
 		scores[1] = 0;
 		scores[2] = 0;
 
-		scoreTexts = new Dictionary<int, Text>();
-		scoreTexts[1] = scoreText1;
-		scoreTexts[2] = scoreText2;
-
-		scoreText1.text = "0";
-		scoreText2.text = "0";
+		board.color1 = TeamColor1;
+		board.color2 = TeamColor2;
 
 		int count = UniMoveController.GetNumConnected();
 		Debug.Log("Controllers connected: " + count);
@@ -123,9 +129,22 @@ public class Game : MonoBehaviour {
 				StartGame();
 			}
 		}
+
+		else if ( phase == Phase.Playing ) {
+			gameTime -= Time.deltaTime;
+			board.seconds = gameTime;
+			board.score1 = scores[0];
+			board.score2 = scores[2];
+		}
+
+		if ( Input.GetKeyDown(KeyCode.D) ) {
+			debugContainer.SetActive(!debugContainer.activeSelf);
+		}
 	}
 
 	void StartGame() {
+		gameTime = gameLength;
+
 		foreach ( Player player in players ) {
 			player.inGame = true;
 		}
@@ -134,7 +153,7 @@ public class Game : MonoBehaviour {
 		
 		playerCycleIdx = 0;
 		playerCycleCount = 0;
-		CycleBall(false, null);
+		CycleBall(false);
 	}
 
 	void OnPlayerFumble(Player player) {
@@ -145,10 +164,13 @@ public class Game : MonoBehaviour {
 		playerCycle = GetRandomizedPlayers();
 		playerCycle.Remove(holdingPlayer);
 
+		playerCycleLengthOverride = null;
+
 		playerCycleIdx = 0;
 		playerCycleCount = 0;
-		CycleBall(false, null);
+		CycleBall(false);
 
+		lastHoldingPlayer = holdingPlayer;
 		holdingPlayer = null;
 
 		audioSource.PlayOneShot(FumbleSound);
@@ -157,26 +179,37 @@ public class Game : MonoBehaviour {
 	void OnPlayerPass(Player player) {
 		if ( scoreRoutine != null ) StopCoroutine(scoreRoutine);
 
-		// figure out who's closest in orientation, and start a cycle with that player
-		Player closest = null;
+		playerCycleLengthOverride = new Dictionary<Player, float>();
+
+		List<Player> passablePlayers = new List<Player>();
 		foreach ( Player p in players ) {
 			if ( p != holdingPlayer ) {
-				if ( closest == null || holdingPlayer.GetOrientationDifference(p) < holdingPlayer.GetOrientationDifference(closest) ) {
-					closest = p;
+				if ( holdingPlayer.GetOrientationDifference(p) < orientationSamenessThreshold ) {
+					passablePlayers.Add(p);
 				}
+//				if ( closest == null || holdingPlayer.GetOrientationDifference(p) < holdingPlayer.GetOrientationDifference(closest) ) {
+//					closest = p;
+//				}
 			}
 		}
+
+		passablePlayers.Sort( (p1,p2) => (int)(p2.TimeInOrientation - p1.TimeInOrientation) ); // if P2 has more time, it "less than" P1 meaning it comes first
 
 		playerCycle = GetRandomizedPlayers();
 		playerCycle.Remove(holdingPlayer);
 
-		playerCycle.Remove(closest);
-		playerCycle.Insert(0, closest);
+		for ( int i=passablePlayers.Count-1; i>=0; i-- ) {
+			Player p = passablePlayers[i];
+			playerCycle.Remove(p);
+			playerCycle.Insert(0, p);
+			playerCycleLengthOverride[p] = cyclePassLength;
+		}
 
 		playerCycleIdx = 0; 
 		playerCycleCount = 0;
-		CycleBall(false, cyclePassLength);
+		CycleBall(false);
 
+		lastHoldingPlayer = holdingPlayer;
 		holdingPlayer = null;
 
 		audioSource.PlayOneShot(PassSound);
@@ -187,12 +220,18 @@ public class Game : MonoBehaviour {
 
 		holdingPlayer = player;
 
+		if ( lastHoldingPlayer != null && lastHoldingPlayer.team == holdingPlayer.team ) {
+			currentScoreLength -= scoreDecreaseLengthBonus;
+		} else {
+			currentScoreLength = scoreLength;
+		}
+
 		Score(0);
 
 		audioSource.PlayOneShot(CatchSound);
 	}
 
-	void CycleBall(bool advance, float? overrideLength) {
+	void CycleBall(bool advance) {
 		if ( advance ) {
 			Player playerOff = playerCycle[playerCycleIdx];
 			playerOff.CycleBallOff();
@@ -207,26 +246,31 @@ public class Game : MonoBehaviour {
 		Player playerOn = playerCycle[playerCycleIdx];
 		playerOn.CycleBallOn();
 
-		float? length = overrideLength ?? cycleStartLength + playerCycleCount*cycleIncreaseLength;
-		ballCycleRoutine = WaitAndCycleBall((float)length);
+		float length = cycleStartLength + playerCycleCount*cycleIncreaseLength;
+
+		if ( playerCycleLengthOverride != null && playerCycleLengthOverride.ContainsKey(playerOn) ) {
+			length = playerCycleLengthOverride[playerOn];
+			playerCycleLengthOverride.Remove(playerOn);
+		}
+
+		ballCycleRoutine = WaitAndCycleBall(length);
 		StartCoroutine(ballCycleRoutine);
 	}
 
 	IEnumerator WaitAndCycleBall(float seconds) {
 		yield return new WaitForSeconds(seconds);
-		CycleBall(true, null);
+		CycleBall(true);
 	}
 
 	void Score(int points) {
 		scores[holdingPlayer.team] += points;
-		scoreTexts[holdingPlayer.team].text = scores[holdingPlayer.team].ToString();
 
 		if ( points > 0 ) {
 			holdingPlayer.Score(points);
 			audioSource.PlayOneShot(ScoreSound);
 		}
 
-		scoreRoutine = WaitAndScore(scoreLength);
+		scoreRoutine = WaitAndScore(currentScoreLength);
 		StartCoroutine(scoreRoutine);
 	}
 
@@ -240,7 +284,7 @@ public class Game : MonoBehaviour {
 		List<Player> list = new List<Player>(players);
 		
 		for (int i = list.Count; i > 1; i--) {
-			int pos = Random.Range(0, i-1);
+			int pos = UnityEngine.Random.Range(0, i-1);
 			var x = list[i - 1];
 			list[i - 1] = list[pos];
 			list[pos] = x;

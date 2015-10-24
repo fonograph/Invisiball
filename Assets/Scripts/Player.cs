@@ -18,13 +18,19 @@ public class Player : MonoBehaviour {
 	private bool startedPass;
 	private bool startedFumble;
 	private Vector3 lastAccel = Vector3.zero;
-	private Vector3 startOrientation;
 	private IEnumerator setLEDRoutine;
+	private IEnumerator setRumbleRoutine;
 
+	private Vector3 registeredOrientation;
+	private DateTime registeredOrientationStart;
 
 	public event Action<Player> FumbleEvent;
 	public event Action<Player> PassEvent;
 	public event Action<Player> CatchEvent;
+
+	public double TimeInOrientation {
+		get { return DateTime.Now.Subtract(registeredOrientationStart).TotalMilliseconds; }
+	}
 
 	void Awake() {
 	}
@@ -44,7 +50,7 @@ public class Player : MonoBehaviour {
 
 		if ( !inGame ) 
 			return;
-	
+
 		// CATCHING
 		// you need to press the trigger WHILE you have the cycle
 		if ( hasCycle ) {
@@ -72,7 +78,7 @@ public class Player : MonoBehaviour {
 		if ( hasBall && !startedPass && !startedFumble && DateTime.Now.Subtract(hasBallStart).TotalSeconds > Game.Instance.catchMargin ) { // allow a split second after receiving before fumbling is possible
 //			if ( Mathf.Abs(controller.Acceleration.x-lastAccel.x)>accelTolerance || Mathf.Abs(controller.Acceleration.y-lastAccel.y)>accelTolerance || Mathf.Abs(controller.Acceleration.z-lastAccel.z)>accelTolerance ) {
 
-			Vector3 orientationDiff = normalizedOrientationDifference(normalizedOrientation(controller.Orientation.eulerAngles), startOrientation);
+			Vector3 orientationDiff = normalizedOrientationDifference(normalizedOrientation(controller.Orientation.eulerAngles), registeredOrientation);
 //			Debug.Log (orientationDiff);
 //			Debug.Log (orientationDiff.magnitude);
 
@@ -96,33 +102,30 @@ public class Player : MonoBehaviour {
 
 		}
 
-		// DEBUG
-
-//		if ( hasBall ) {
-//			Debug.Log(controller.Orientation.eulerAngles);
-//			Debug.Log((controller.Orientation.eulerAngles - startOrientation));
-//			Debug.Log((controller.Orientation.eulerAngles - startOrientation).magnitude);
-//		}
-//		if ( Game.Instance.HoldingPlayer != null && Game.Instance.HoldingPlayer != this ) {
-//			Vector2 direction = new Vector2(controller.Orientation.eulerAngles.x, controller.Orientation.eulerAngles.y);
-//			Vector2 otherDirection = new Vector2(Game.Instance.HoldingPlayer.controller.Orientation.eulerAngles.x, Game.Instance.HoldingPlayer.controller.Orientation.eulerAngles.y);
-//			//Debug.Log( (controller.Orientation.eulerAngles-Game.Instance.HoldingPlayer.controller.Orientation.eulerAngles).magnitude ) ;
-//
-//			if ( direction.x > 180 )
-//				direction.x -= 360;
-//			if ( direction.y > 180 )
-//				direction.y -= 360;
-//			if ( otherDirection.x > 180 ) 
-//				otherDirection.x -= 360;
-//			if ( otherDirection.y > 180 ) 
-//				otherDirection.y -= 360;
-
-			//Debug.Log( (direction-otherDirection).magnitude );
-//			Debug.Log (direction);
-//			Debug.Log (otherDirection);
-//		}
+		// while we don't have the ball, register orientation changes for the sake of receiving passes
+		if ( !hasBall ) {
+			Vector3 diff = normalizedOrientationDifference(normalizedOrientation(controller.Orientation.eulerAngles), normalizedOrientation(registeredOrientation));
+			Vector2 diff2 = new Vector2(diff.x, diff.y);
+			if ( diff2.magnitude > Game.Instance.orientationSamenessThreshold ) {
+				registeredOrientation = normalizedOrientation(controller.Orientation.eulerAngles);
+				registeredOrientationStart = DateTime.Now;
+			}
+		}
 
 		lastAccel = controller.Acceleration;
+
+
+		
+		// DEBUG
+		
+		//		if ( hasBall ) {
+		//			Debug.Log(controller.Orientation.eulerAngles);
+		//			Debug.Log((controller.Orientation.eulerAngles - startOrientation));
+		//			Debug.Log((controller.Orientation.eulerAngles - startOrientation).magnitude);
+		//		}
+		//		if ( Game.Instance.HoldingPlayer != null && Game.Instance.HoldingPlayer != this ) {
+		//			Debug.Log (Game.Instance.HoldingPlayer.GetOrientationDifference(this));
+		//		}
 	}
 
 	public void SetTeam(int theTeam) {
@@ -136,6 +139,8 @@ public class Player : MonoBehaviour {
 
 	public void CycleBallOn() {
 		SetLED(Game.Instance.CycleColor);
+		SetRumble(0.3f);
+		SetRumble(0, 0.3f);
 		hasCycle = true;
 		readyToCatch = false;
 	}
@@ -146,29 +151,35 @@ public class Player : MonoBehaviour {
 	}
 
 	public void GainBall() {
-		SetLED(Game.Instance.BallColor);
+//		SetLED(Game.Instance.BallColor);
+		Flash(Game.Instance.BallColor, defaultColor);
 		hasBall = true;
 		hasBallStart = DateTime.Now;
 		hasCycle = false;
 		startedPass = false;
 		startedFumble = false;
-		startOrientation = normalizedOrientation(controller.Orientation.eulerAngles);
+		registeredOrientation = normalizedOrientation(controller.Orientation.eulerAngles);
 	}
 
 	public void LoseBall() {
-		SetLED(defaultColor);
+		SetLED(Color.black);
+		SetLED(defaultColor, 1);
 		hasBall = false;
 	}
 
 	public void Score(int points) {
-		SetLED(Game.Instance.ScoreColor);
-		SetLED(Game.Instance.BallColor, 0.2f);
+//		SetLED(Game.Instance.ScoreColor);
+//		SetLED(Game.Instance.BallColor, 0.2f);
+//		SetRumble(0.5f);
+//		SetRumble(0, 0.2f);
 	}
 
 	// INTERNAL EVENTS
 
 	public void CatchBall() {
 		GainBall();
+		SetRumble(0.5f);
+		SetRumble(0, 0.3f);
 		CatchEvent(this);
 	}
 
@@ -179,6 +190,8 @@ public class Player : MonoBehaviour {
 
 	public void FumbleBall() {
 		LoseBall();
+		SetRumble(1);
+		SetRumble(0, 0.5f);
 		FumbleEvent(this);
 	}
 
@@ -196,12 +209,14 @@ public class Player : MonoBehaviour {
 	}
 
 	private void SetLED(Color color, float? delay) {
+		if ( setLEDRoutine != null) 
+			StopCoroutine(setLEDRoutine);
+
 		if ( delay != null ) {
 			setLEDRoutine = SetLEDCoroutine(color, (float)delay);
 			StartCoroutine(setLEDRoutine);
 		}
 		else {
-			if ( setLEDRoutine != null) StopCoroutine(setLEDRoutine);
 			controller.SetLED(color);
 		}
 	}
@@ -210,6 +225,46 @@ public class Player : MonoBehaviour {
 		yield return new WaitForSeconds(seconds); 
 		SetLED(color); 
 	}
+
+	
+	private void SetRumble(float rumble) {
+		SetRumble(rumble, null);
+	}
+	
+	private void SetRumble(float rumble, float? delay) {
+		if ( setRumbleRoutine != null) 
+			StopCoroutine(setRumbleRoutine);
+		
+		if ( delay != null ) {
+			setRumbleRoutine = SetRumbleCoroutine(rumble, (float)delay);
+			StartCoroutine(setRumbleRoutine);
+		}
+		else {
+			controller.SetRumble(rumble);
+		}
+	}
+	
+	private IEnumerator SetRumbleCoroutine(float rumble, float seconds) {
+		yield return new WaitForSeconds(seconds); 
+		SetRumble(rumble); 
+	}
+
+	private void Flash(Color color1, Color color2) {
+		if ( setLEDRoutine != null) 
+			StopCoroutine(setLEDRoutine);
+
+		SetLED(color1);
+		setLEDRoutine = FlashCoroutine(color1, color2, 0.1f);
+		StartCoroutine(setLEDRoutine);
+	}
+
+	private IEnumerator FlashCoroutine(Color color1, Color color2, float delay) {
+		yield return new WaitForSeconds(delay);
+		Flash(color2, color1);
+	}
+	
+
+
 
 	private Vector3 normalizedOrientation(Vector3 o) {
 		Vector3 orientation = o;

@@ -1,6 +1,8 @@
 Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2008
 
+Project("{25A330C1-FDBE-EC2B-ABEA-773003A93201}") = "PSMoveGame", "Assembly-CSharp-firstpass-vs.csproj", "{315DE202-D353-E857-4E85-49A5EC4306DB}"
+EndProject
 Project("{25A330C1-FDBE-EC2B-ABEA-773003A93201}") = "PSMoveGame", "Assembly-CSharp-vs.csproj", "{D571735E-62FB-7318-589A-D84ADCBB5EE9}"
 EndProject
 Project("{25A330C1-FDBE-EC2B-ABEA-773003A93201}") = "PSMoveGame", "Assembly-CSharp-Editor-vs.csproj", "{4EB2F8AA-12E6-DFCB-513C-FA4CCBF2E024}"
@@ -11,6 +13,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{315DE202-D353-E857-4E85-49A5EC4306DB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{315DE202-D353-E857-4E85-49A5EC4306DB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{315DE202-D353-E857-4E85-49A5EC4306DB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{315DE202-D353-E857-4E85-49A5EC4306DB}.Release|Any CPU.Build.0 = Release|Any CPU
 		{D571735E-62FB-7318-589A-D84ADCBB5EE9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{D571735E-62FB-7318-589A-D84ADCBB5EE9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D571735E-62FB-7318-589A-D84ADCBB5EE9}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -23,7 +29,7 @@ Global
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
-																								GlobalSection(MonoDevelopProperties) = preSolution
+																																								GlobalSection(MonoDevelopProperties) = preSolution
 		StartupItem = Assembly-CSharp.csproj
 		Policies = $0
 		$0.TextStylePolicy = $1
