@@ -20,10 +20,12 @@ public class Game : MonoBehaviour {
 	public Color CycleColor;
 	public Color BallColor;
 	public Color ScoreColor;
-	public AudioClip CatchSound;
+	public AudioClip CatchFumbleSound;
+	public AudioClip CatchPassSound;
 	public AudioClip FumbleSound;
 	public AudioClip PassSound;
 	public AudioClip ScoreSound;
+	public AudioClip CycleSound;
 	public int gameLength;
 	public float accelTolerance;
 	public float gyroTolerance;
@@ -40,8 +42,9 @@ public class Game : MonoBehaviour {
 
 	public static Game Instance;
 
-	private AudioSource audioSource;
 	private Board board;
+	private AudioSource audioSource;
+	private AudioSource scoreAudioSource;
 
 	private List<Player> players;
 	private Dictionary<int, int> scores;
@@ -54,6 +57,7 @@ public class Game : MonoBehaviour {
 	private List<Player> playerCycle;
 	private int playerCycleIdx;
 	private int playerCycleCount;
+	private bool playerCycleCurrentlyOnPass;
 	private Dictionary<Player, float> playerCycleLengthOverride;
 	private float currentScoreLength;
 
@@ -66,8 +70,9 @@ public class Game : MonoBehaviour {
 
 	void Awake() {
 		Instance = this;
-		audioSource = GetComponent<AudioSource>();
 		board = FindObjectOfType<Board>();
+		audioSource = gameObject.AddComponent<AudioSource>();
+		scoreAudioSource = gameObject.AddComponent<AudioSource>();
 	}
 
 	void Start() {
@@ -125,15 +130,43 @@ public class Game : MonoBehaviour {
 		}
 
 		else if ( phase == Phase.Waiting ) {
+			// start game
 			if ( Input.GetKeyDown(KeyCode.Space) ) {
+				phase = Phase.Playing;
 				StartGame();
+			}
+
+			// color switching
+			foreach ( Player player in players ) {
+				Color? setColor = null;
+				if ( player.controller.GetButtonDown(PSMoveButton.Square) )
+					setColor = new Color(1, 0, 0.5f);
+				else if ( player.controller.GetButtonDown(PSMoveButton.Triangle) )
+					setColor = new Color(0, 1, 0);
+				else if ( player.controller.GetButtonDown(PSMoveButton.Cross) )
+					setColor = new Color(0, 0, 1);
+				else if ( player.controller.GetButtonDown(PSMoveButton.Circle) )
+					setColor = new Color(1, 0.5f, 0);
+
+				if ( setColor != null ) {
+					if ( player.team == 1 && !TeamColor2.Equals(setColor) ) 
+						TeamColor1 = (Color)setColor;
+					if ( player.team == 2 && !TeamColor1.Equals(setColor) ) 
+						TeamColor2 = (Color)setColor;
+
+					foreach ( Player p in players ) 
+						p.UpdateTeamColor();
+
+					board.color1 = TeamColor1;
+					board.color2 = TeamColor2;
+				}
 			}
 		}
 
 		else if ( phase == Phase.Playing ) {
 			gameTime -= Time.deltaTime;
 			board.seconds = gameTime;
-			board.score1 = scores[0];
+			board.score1 = scores[1];
 			board.score2 = scores[2];
 		}
 
@@ -222,13 +255,15 @@ public class Game : MonoBehaviour {
 
 		if ( lastHoldingPlayer != null && lastHoldingPlayer.team == holdingPlayer.team ) {
 			currentScoreLength -= scoreDecreaseLengthBonus;
+			if ( currentScoreLength < 0.5 ) currentScoreLength = 0.5f;
 		} else {
 			currentScoreLength = scoreLength;
 		}
 
 		Score(0);
 
-		audioSource.PlayOneShot(CatchSound);
+		scoreAudioSource.pitch = 1f;
+		audioSource.PlayOneShot(playerCycleCurrentlyOnPass ? CatchPassSound : CatchFumbleSound);
 	}
 
 	void CycleBall(bool advance) {
@@ -251,10 +286,16 @@ public class Game : MonoBehaviour {
 		if ( playerCycleLengthOverride != null && playerCycleLengthOverride.ContainsKey(playerOn) ) {
 			length = playerCycleLengthOverride[playerOn];
 			playerCycleLengthOverride.Remove(playerOn);
+			playerCycleCurrentlyOnPass = true;
+		} else {
+			playerCycleCurrentlyOnPass = false;
 		}
 
 		ballCycleRoutine = WaitAndCycleBall(length);
 		StartCoroutine(ballCycleRoutine);
+
+		if ( CycleSound != null )
+			audioSource.PlayOneShot(CycleSound);
 	}
 
 	IEnumerator WaitAndCycleBall(float seconds) {
@@ -267,7 +308,9 @@ public class Game : MonoBehaviour {
 
 		if ( points > 0 ) {
 			holdingPlayer.Score(points);
-			audioSource.PlayOneShot(ScoreSound);
+
+			scoreAudioSource.pitch += 0.1f;
+			scoreAudioSource.PlayOneShot(ScoreSound);
 		}
 
 		scoreRoutine = WaitAndScore(currentScoreLength);

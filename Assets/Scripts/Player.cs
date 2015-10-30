@@ -130,8 +130,11 @@ public class Player : MonoBehaviour {
 
 	public void SetTeam(int theTeam) {
 		team = theTeam;
-		defaultColor = theTeam == 1 ? Game.Instance.TeamColor1 : Game.Instance.TeamColor2;
+		UpdateTeamColor();
+	}
 
+	public void UpdateTeamColor() {
+		defaultColor = team == 1 ? Game.Instance.TeamColor1 : Game.Instance.TeamColor2;
 		SetLED(defaultColor);
 	}
 
