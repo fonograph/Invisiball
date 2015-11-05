@@ -47,8 +47,10 @@
   </ItemGroup>
   <ItemGroup>
      <Compile Include="Assets\Scripts\Board.cs" />
+     <Compile Include="Assets\Scripts\DrumKit.cs" />
      <Compile Include="Assets\Scripts\Game.cs" />
      <Compile Include="Assets\Scripts\Player.cs" />
+     <Compile Include="Assets\Scripts\Sounds.cs" />
      <Compile Include="Assets\UniMove\Code\MoveController.cs" />
      <Compile Include="Assets\UniMove\Code\UniMoveController.cs" />
      <Compile Include="Assets\UniMove\Code\UniMoveTest.cs" />

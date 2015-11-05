@@ -7,7 +7,7 @@ using System.Collections.Generic;
 
 public class Game : MonoBehaviour {
 
-	public enum Phase { Connecting, Waiting, Playing };
+	public enum Phase { Connecting, Waiting, Playing, Ended };
 
 	public Player playerPrefab;
 	public Text scoreText1;
@@ -20,12 +20,6 @@ public class Game : MonoBehaviour {
 	public Color CycleColor;
 	public Color BallColor;
 	public Color ScoreColor;
-	public AudioClip CatchFumbleSound;
-	public AudioClip CatchPassSound;
-	public AudioClip FumbleSound;
-	public AudioClip PassSound;
-	public AudioClip ScoreSound;
-	public AudioClip CycleSound;
 	public int gameLength;
 	public float accelTolerance;
 	public float gyroTolerance;
@@ -43,6 +37,7 @@ public class Game : MonoBehaviour {
 	public static Game Instance;
 
 	private Board board;
+	private Sounds sounds;
 	private AudioSource audioSource;
 	private AudioSource scoreAudioSource;
 
@@ -60,6 +55,7 @@ public class Game : MonoBehaviour {
 	private bool playerCycleCurrentlyOnPass;
 	private Dictionary<Player, float> playerCycleLengthOverride;
 	private float currentScoreLength;
+	private List<int> playedCountdownSounds;
 
 	private IEnumerator ballCycleRoutine;
 	private IEnumerator scoreRoutine;
@@ -71,6 +67,7 @@ public class Game : MonoBehaviour {
 	void Awake() {
 		Instance = this;
 		board = FindObjectOfType<Board>();
+		sounds = FindObjectOfType<Sounds>();
 		audioSource = gameObject.AddComponent<AudioSource>();
 		scoreAudioSource = gameObject.AddComponent<AudioSource>();
 	}
@@ -81,6 +78,8 @@ public class Game : MonoBehaviour {
 		scores = new Dictionary<int, int>();
 		scores[1] = 0;
 		scores[2] = 0;
+
+		gameTime = gameLength;
 
 		board.color1 = TeamColor1;
 		board.color2 = TeamColor2;
@@ -132,7 +131,6 @@ public class Game : MonoBehaviour {
 		else if ( phase == Phase.Waiting ) {
 			// start game
 			if ( Input.GetKeyDown(KeyCode.Space) ) {
-				phase = Phase.Playing;
 				StartGame();
 			}
 
@@ -164,10 +162,44 @@ public class Game : MonoBehaviour {
 		}
 
 		else if ( phase == Phase.Playing ) {
+			// stop game
+			if ( Input.GetKeyDown(KeyCode.Space) ) {
+				StopGame();
+			}
+
 			gameTime -= Time.deltaTime;
+
+			// end game?
+			if ( gameTime <= 0 ) {
+				EndGame();
+			}
+
+
+			//update board
 			board.seconds = gameTime;
 			board.score1 = scores[1];
 			board.score2 = scores[2];
+
+			// countdown
+			if ( gameTime < 60 && !playedCountdownSounds.Contains(60) ) PlayCountdown(sounds.OneMinute, 60);
+			if ( gameTime < 30 && !playedCountdownSounds.Contains(30) ) PlayCountdown(sounds.ThirtySeconds, 30);
+			if ( gameTime < 10 && !playedCountdownSounds.Contains(10) ) PlayCountdown(sounds.TenSeconds, 10);
+			if ( gameTime < 9 && !playedCountdownSounds.Contains(9) ) PlayCountdown(sounds.NineSeconds, 9);
+			if ( gameTime < 8 && !playedCountdownSounds.Contains(8) ) PlayCountdown(sounds.EightSeconds, 8);
+			if ( gameTime < 7 && !playedCountdownSounds.Contains(7) ) PlayCountdown(sounds.SevenSeconds, 7);
+			if ( gameTime < 6 && !playedCountdownSounds.Contains(6) ) PlayCountdown(sounds.SixSeconds, 6);
+			if ( gameTime < 5 && !playedCountdownSounds.Contains(5) ) PlayCountdown(sounds.FiveSeconds, 5);
+			if ( gameTime < 4 && !playedCountdownSounds.Contains(4) ) PlayCountdown(sounds.FourSeconds, 4);
+			if ( gameTime < 3 && !playedCountdownSounds.Contains(3) ) PlayCountdown(sounds.ThreeSeconds, 3);
+			if ( gameTime < 2 && !playedCountdownSounds.Contains(2) ) PlayCountdown(sounds.TwoSeconds, 2);
+			if ( gameTime < 1 && !playedCountdownSounds.Contains(1) ) PlayCountdown(sounds.OneSeconds, 1);
+		}
+
+		else if ( phase == Phase.Ended ) {
+			// stop game
+			if ( Input.GetKeyDown(KeyCode.Space) ) {
+				StopGame();
+			}
 		}
 
 		if ( Input.GetKeyDown(KeyCode.D) ) {
@@ -176,17 +208,58 @@ public class Game : MonoBehaviour {
 	}
 
 	void StartGame() {
+		phase = Phase.Playing;
+
 		gameTime = gameLength;
+		scores[1] = 0;
+		scores[2] = 0;
 
 		foreach ( Player player in players ) {
 			player.inGame = true;
 		}
+
+		playedCountdownSounds = new List<int>();
 
 		playerCycle = GetRandomizedPlayers();
 		
 		playerCycleIdx = 0;
 		playerCycleCount = 0;
 		CycleBall(false);
+
+		audioSource.PlayOneShot(sounds.GameStart);
+	}
+
+	void StopGame() {
+		phase = Phase.Waiting;
+
+		if ( scoreRoutine != null ) StopCoroutine(scoreRoutine);
+		if ( ballCycleRoutine != null ) StopCoroutine(ballCycleRoutine);
+
+		gameTime = gameLength;
+		scores[1] = 0;
+		scores[2] = 0;
+
+		foreach ( Player player in players ) {
+			player.inGame = false;
+			player.ResetLEDAndRumble();
+		}
+	}
+
+	void EndGame() {
+		phase = Phase.Ended;
+
+		if ( scoreRoutine != null ) StopCoroutine(scoreRoutine);
+		if ( ballCycleRoutine != null ) StopCoroutine(ballCycleRoutine);
+
+		foreach ( Player player in players ) {
+			player.inGame = false;
+
+			int otherTeam = player.team == 1 ? 2 : 1;
+			bool won = scores[player.team] > scores[otherTeam];
+			player.SetEnding(won);
+		}
+
+		audioSource.PlayOneShot(sounds.GameEnd);
 	}
 
 	void OnPlayerFumble(Player player) {
@@ -206,7 +279,7 @@ public class Game : MonoBehaviour {
 		lastHoldingPlayer = holdingPlayer;
 		holdingPlayer = null;
 
-		audioSource.PlayOneShot(FumbleSound);
+		audioSource.PlayOneShot(sounds.FumbleSound);
 	}
 
 	void OnPlayerPass(Player player) {
@@ -245,7 +318,7 @@ public class Game : MonoBehaviour {
 		lastHoldingPlayer = holdingPlayer;
 		holdingPlayer = null;
 
-		audioSource.PlayOneShot(PassSound);
+		audioSource.PlayOneShot(sounds.PassSound);
 	}
 
 	void OnPlayerCatch(Player player) {
@@ -263,7 +336,7 @@ public class Game : MonoBehaviour {
 		Score(0);
 
 		scoreAudioSource.pitch = 1f;
-		audioSource.PlayOneShot(playerCycleCurrentlyOnPass ? CatchPassSound : CatchFumbleSound);
+		audioSource.PlayOneShot(playerCycleCurrentlyOnPass ? sounds.CatchPassSound : sounds.CatchFumbleSound);
 	}
 
 	void CycleBall(bool advance) {
@@ -294,8 +367,8 @@ public class Game : MonoBehaviour {
 		ballCycleRoutine = WaitAndCycleBall(length);
 		StartCoroutine(ballCycleRoutine);
 
-		if ( CycleSound != null )
-			audioSource.PlayOneShot(CycleSound);
+		if ( sounds.CycleSound != null )
+			audioSource.PlayOneShot(sounds.CycleSound[playerCycleIdx]);
 	}
 
 	IEnumerator WaitAndCycleBall(float seconds) {
@@ -310,7 +383,7 @@ public class Game : MonoBehaviour {
 			holdingPlayer.Score(points);
 
 			scoreAudioSource.pitch += 0.1f;
-			scoreAudioSource.PlayOneShot(ScoreSound);
+			scoreAudioSource.PlayOneShot(sounds.ScoreSound);
 		}
 
 		scoreRoutine = WaitAndScore(currentScoreLength);
@@ -320,6 +393,11 @@ public class Game : MonoBehaviour {
 	IEnumerator WaitAndScore(float seconds) {
 		yield return new WaitForSeconds(seconds);
 		Score(1);
+	}
+
+	void PlayCountdown(AudioClip sound, int id) {
+		audioSource.PlayOneShot(sound);
+		playedCountdownSounds.Add(id);
 	}
 
 

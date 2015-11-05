@@ -138,6 +138,19 @@ public class Player : MonoBehaviour {
 		SetLED(defaultColor);
 	}
 
+	public void ResetLEDAndRumble() {
+		SetLED(defaultColor);
+		SetRumble(0);
+	}
+
+	public void SetEnding(bool won) {
+		if ( won ) {
+			Flash(Game.Instance.BallColor, defaultColor);
+		} else {
+			SetLED(Color.black);
+		}
+	}
+
 	// STATE
 
 	public void CycleBallOn() {
