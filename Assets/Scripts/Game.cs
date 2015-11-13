@@ -40,6 +40,7 @@ public class Game : MonoBehaviour {
 	private Sounds sounds;
 	private AudioSource audioSource;
 	private AudioSource scoreAudioSource;
+	private Crowd crowd;
 
 	private List<Player> players;
 	private Dictionary<int, int> scores;
@@ -70,6 +71,7 @@ public class Game : MonoBehaviour {
 		sounds = FindObjectOfType<Sounds>();
 		audioSource = gameObject.AddComponent<AudioSource>();
 		scoreAudioSource = gameObject.AddComponent<AudioSource>();
+		crowd = FindObjectOfType<Crowd>();
 	}
 
 	void Start() {
@@ -205,6 +207,13 @@ public class Game : MonoBehaviour {
 		if ( Input.GetKeyDown(KeyCode.D) ) {
 			debugContainer.SetActive(!debugContainer.activeSelf);
 		}
+		if ( Input.GetKeyDown(KeyCode.R) ) {
+			foreach ( Player p in players ) {
+				if ( p.controller != null ) {
+					p.controller.ResetOrientation();
+				}
+			}
+		}
 	}
 
 	void StartGame() {
@@ -227,6 +236,8 @@ public class Game : MonoBehaviour {
 		CycleBall(false);
 
 		audioSource.PlayOneShot(sounds.GameStart);
+
+		crowd.Activate();
 	}
 
 	void StopGame() {
@@ -243,6 +254,8 @@ public class Game : MonoBehaviour {
 			player.inGame = false;
 			player.ResetLEDAndRumble();
 		}
+
+		crowd.Reset();
 	}
 
 	void EndGame() {
@@ -260,6 +273,8 @@ public class Game : MonoBehaviour {
 		}
 
 		audioSource.PlayOneShot(sounds.GameEnd);
+
+		crowd.Deactivate();
 	}
 
 	void OnPlayerFumble(Player player) {
@@ -280,6 +295,8 @@ public class Game : MonoBehaviour {
 		holdingPlayer = null;
 
 		audioSource.PlayOneShot(sounds.FumbleSound);
+
+		crowd.Poke();
 	}
 
 	void OnPlayerPass(Player player) {
@@ -329,8 +346,14 @@ public class Game : MonoBehaviour {
 		if ( lastHoldingPlayer != null && lastHoldingPlayer.team == holdingPlayer.team ) {
 			currentScoreLength -= scoreDecreaseLengthBonus;
 			if ( currentScoreLength < 0.5 ) currentScoreLength = 0.5f;
+
+			crowd.Intensify();
+			crowd.Poke();
 		} else {
 			currentScoreLength = scoreLength;
+
+			crowd.Reset();
+			crowd.Poke();
 		}
 
 		Score(0);
