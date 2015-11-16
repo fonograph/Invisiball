@@ -23,6 +23,7 @@ public class Board : MonoBehaviour {
 	public Image circleB2;
 
 	public Text timeText;
+	public Text passModeText;
 
 	// Use this for initialization
 	void Start () {
@@ -74,6 +75,8 @@ public class Board : MonoBehaviour {
 		int m = Mathf.CeilToInt(seconds) / 60;
 		int s = Mathf.CeilToInt(seconds) % 60;
 		timeText.text = m.ToString() + ":" +s.ToString().PadLeft(2, '0');
+
+		passModeText.text = Game.Instance.passMode.ToString().Substring(0,1);
 	}
 	
 

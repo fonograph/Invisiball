@@ -8,6 +8,7 @@ using System.Collections.Generic;
 public class Game : MonoBehaviour {
 
 	public enum Phase { Connecting, Waiting, Playing, Ended };
+	public enum PassMode { Imaginary, Button }
 
 	public Player playerPrefab;
 	public Text scoreText1;
@@ -17,22 +18,29 @@ public class Game : MonoBehaviour {
 
 	public Color TeamColor1;
 	public Color TeamColor2;
+	public string TeamName1;
+	public string TeamName2;
 	public Color CycleColor;
 	public Color BallColor;
 	public Color ScoreColor;
 	public int gameLength;
 	public float accelTolerance;
 	public float gyroTolerance;
-	public float orientationSamenessThreshold;
+	public float flatnessThreshold;
 	public float scoreLength;
 	public float scoreDecreaseLengthBonus;
 	public float cycleStartLength;
 	public float cycleIncreaseLength;
-	public float cyclePassLength;
-	public float catchMargin;
-	public float passMargin;
-	public float passLength;
+	public float catchMargin; // time you have to move after catching
+	public float passMargin; // time you have after moving to start the pass (by releasing trigger)
+	public float passLength; // time between releasing the trigger and the pass execution
+	public float passAccelThreshold; // accel change threshold
+	public float passCatchTimeout;
+	public float deathLength;
+	public float buttonDeathTimeout;
 	public bool suppressFumble;
+	public PassMode passMode;
+	public bool enableAnnouncer;
 
 	public static Game Instance;
 
@@ -41,25 +49,25 @@ public class Game : MonoBehaviour {
 	private AudioSource audioSource;
 	private AudioSource scoreAudioSource;
 	private Crowd crowd;
+	private Announcer announcer;
 
 	private List<Player> players;
 	private Dictionary<int, int> scores;
 
 	private Phase phase;
-
+	private bool isPractice;
 	private float gameTime;
 	private Player holdingPlayer;
 	private Player lastHoldingPlayer;
 	private List<Player> playerCycle;
 	private int playerCycleIdx;
 	private int playerCycleCount;
-	private bool playerCycleCurrentlyOnPass;
-	private Dictionary<Player, float> playerCycleLengthOverride;
 	private float currentScoreLength;
 	private List<int> playedCountdownSounds;
 
 	private IEnumerator ballCycleRoutine;
 	private IEnumerator scoreRoutine;
+	private IEnumerator passTimeoutRoutine;
 
 	public Player HoldingPlayer {
 		get { return holdingPlayer; }
@@ -69,9 +77,10 @@ public class Game : MonoBehaviour {
 		Instance = this;
 		board = FindObjectOfType<Board>();
 		sounds = FindObjectOfType<Sounds>();
-		audioSource = gameObject.AddComponent<AudioSource>();
+		audioSource = gameObject.GetComponent<AudioSource>();
 		scoreAudioSource = gameObject.AddComponent<AudioSource>();
 		crowd = FindObjectOfType<Crowd>();
+		announcer = FindObjectOfType<Announcer>();
 	}
 
 	void Start() {
@@ -133,26 +142,40 @@ public class Game : MonoBehaviour {
 		else if ( phase == Phase.Waiting ) {
 			// start game
 			if ( Input.GetKeyDown(KeyCode.Space) ) {
-				StartGame();
+				bool practice = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+				StartGame(practice);
 			}
 
 			// color switching
 			foreach ( Player player in players ) {
 				Color? setColor = null;
-				if ( player.controller.GetButtonDown(PSMoveButton.Square) )
+				string setName = null;
+				if ( player.controller.GetButtonDown(PSMoveButton.Square) ) {
 					setColor = new Color(1, 0, 0.5f);
-				else if ( player.controller.GetButtonDown(PSMoveButton.Triangle) )
+					setName = "pink";
+				}
+				else if ( player.controller.GetButtonDown(PSMoveButton.Triangle) ) {
 					setColor = new Color(0, 1, 0);
-				else if ( player.controller.GetButtonDown(PSMoveButton.Cross) )
+					setName = "green";
+				}
+				else if ( player.controller.GetButtonDown(PSMoveButton.Cross) ) {
 					setColor = new Color(0, 0, 1);
-				else if ( player.controller.GetButtonDown(PSMoveButton.Circle) )
+					setName = "blue";
+				}
+				else if ( player.controller.GetButtonDown(PSMoveButton.Circle) ) {
 					setColor = new Color(1, 0.5f, 0);
+					setName = "orange";
+				}
 
 				if ( setColor != null ) {
-					if ( player.team == 1 && !TeamColor2.Equals(setColor) ) 
+					if ( player.team == 1 && !TeamColor2.Equals(setColor) )  {
 						TeamColor1 = (Color)setColor;
-					if ( player.team == 2 && !TeamColor1.Equals(setColor) ) 
+						TeamName1 = (string)setName;
+					}
+					if ( player.team == 2 && !TeamColor1.Equals(setColor) ) {
 						TeamColor2 = (Color)setColor;
+						TeamName2 = (string)setName;
+					}
 
 					foreach ( Player p in players ) 
 						p.UpdateTeamColor();
@@ -169,7 +192,9 @@ public class Game : MonoBehaviour {
 				StopGame();
 			}
 
-			gameTime -= Time.deltaTime;
+			if ( !isPractice ) {
+				gameTime -= Time.deltaTime;
+			}
 
 			// end game?
 			if ( gameTime <= 0 ) {
@@ -183,8 +208,14 @@ public class Game : MonoBehaviour {
 			board.score2 = scores[2];
 
 			// countdown
-			if ( gameTime < 60 && !playedCountdownSounds.Contains(60) ) PlayCountdown(sounds.OneMinute, 60);
-			if ( gameTime < 30 && !playedCountdownSounds.Contains(30) ) PlayCountdown(sounds.ThirtySeconds, 30);
+			if ( gameTime < 60 && !playedCountdownSounds.Contains(60) ) {
+				PlayCountdown(sounds.OneMinute, 60);
+				announcer.PlayOneMinute(scores[1] > scores[2] ? TeamName1 : TeamName2);
+			}
+			if ( gameTime < 30 && !playedCountdownSounds.Contains(30) ) {
+				PlayCountdown(sounds.ThirtySeconds, 30);
+				announcer.PlayThirtySeconds(scores[1] > scores[2] ? TeamName1 : TeamName2);
+			}
 			if ( gameTime < 10 && !playedCountdownSounds.Contains(10) ) PlayCountdown(sounds.TenSeconds, 10);
 			if ( gameTime < 9 && !playedCountdownSounds.Contains(9) ) PlayCountdown(sounds.NineSeconds, 9);
 			if ( gameTime < 8 && !playedCountdownSounds.Contains(8) ) PlayCountdown(sounds.EightSeconds, 8);
@@ -214,10 +245,18 @@ public class Game : MonoBehaviour {
 				}
 			}
 		}
+		if ( Input.GetKeyDown(KeyCode.P) ) {
+			passMode = passMode==PassMode.Imaginary ? PassMode.Button : PassMode.Imaginary;
+		}
+		if ( Input.GetKeyDown(KeyCode.A) ) {
+			enableAnnouncer = !enableAnnouncer;
+			announcer.isEnabled = enableAnnouncer;
+		}
 	}
 
-	void StartGame() {
+	void StartGame(bool practice) {
 		phase = Phase.Playing;
+		isPractice = practice;
 
 		gameTime = gameLength;
 		scores[1] = 0;
@@ -227,24 +266,34 @@ public class Game : MonoBehaviour {
 			player.inGame = true;
 		}
 
+		passTimeoutRoutine = null;
+
 		playedCountdownSounds = new List<int>();
 
 		playerCycle = GetRandomizedPlayers();
 		
 		playerCycleIdx = 0;
 		playerCycleCount = 0;
-		CycleBall(false);
 
-		audioSource.PlayOneShot(sounds.GameStart);
+		announcer.isEnabled = !isPractice && enableAnnouncer;
 
-		crowd.Activate();
+		announcer.PlayStart(delegate() {
+			audioSource.PlayOneShot(sounds.GameStart);
+			CycleBall(false);
+		});
+
+		if ( !isPractice ) {
+			crowd.Activate();
+		}
 	}
+
 
 	void StopGame() {
 		phase = Phase.Waiting;
 
 		if ( scoreRoutine != null ) StopCoroutine(scoreRoutine);
 		if ( ballCycleRoutine != null ) StopCoroutine(ballCycleRoutine);
+		if ( passTimeoutRoutine != null ) StopCoroutine(passTimeoutRoutine);
 
 		gameTime = gameLength;
 		scores[1] = 0;
@@ -255,7 +304,7 @@ public class Game : MonoBehaviour {
 			player.ResetLEDAndRumble();
 		}
 
-		crowd.Reset();
+		crowd.Deactivate();
 	}
 
 	void EndGame() {
@@ -263,6 +312,7 @@ public class Game : MonoBehaviour {
 
 		if ( scoreRoutine != null ) StopCoroutine(scoreRoutine);
 		if ( ballCycleRoutine != null ) StopCoroutine(ballCycleRoutine);
+		if ( passTimeoutRoutine != null ) StopCoroutine(passTimeoutRoutine);
 
 		foreach ( Player player in players ) {
 			player.inGame = false;
@@ -274,7 +324,17 @@ public class Game : MonoBehaviour {
 
 		audioSource.PlayOneShot(sounds.GameEnd);
 
-		crowd.Deactivate();
+		crowd.Intensify();
+		crowd.Poke();
+		crowd.Poke();
+
+		StartCoroutine(WaitAndPlayAnnouncerEnding(3));
+		StartCoroutine(crowd.WaitAndDeactivate(8));
+	}
+
+	IEnumerator WaitAndPlayAnnouncerEnding(float seconds) {
+		yield return new WaitForSeconds(seconds);
+		announcer.PlayEnding(scores[1] > scores[2] ? TeamName1 : TeamName2);
 	}
 
 	void OnPlayerFumble(Player player) {
@@ -284,8 +344,6 @@ public class Game : MonoBehaviour {
 
 		playerCycle = GetRandomizedPlayers();
 		playerCycle.Remove(holdingPlayer);
-
-		playerCycleLengthOverride = null;
 
 		playerCycleIdx = 0;
 		playerCycleCount = 0;
@@ -297,40 +355,29 @@ public class Game : MonoBehaviour {
 		audioSource.PlayOneShot(sounds.FumbleSound);
 
 		crowd.Poke();
+		announcer.PlayFumble();
 	}
 
 	void OnPlayerPass(Player player) {
 		if ( scoreRoutine != null ) StopCoroutine(scoreRoutine);
 
-		playerCycleLengthOverride = new Dictionary<Player, float>();
-
-		List<Player> passablePlayers = new List<Player>();
 		foreach ( Player p in players ) {
 			if ( p != holdingPlayer ) {
-				if ( holdingPlayer.GetOrientationDifference(p) < orientationSamenessThreshold ) {
-					passablePlayers.Add(p);
+				if ( passMode == PassMode.Imaginary ) {
+					if ( p.IsFlat && !p.IsDead ) {
+						p.PassBallOn();
+					}
 				}
-//				if ( closest == null || holdingPlayer.GetOrientationDifference(p) < holdingPlayer.GetOrientationDifference(closest) ) {
-//					closest = p;
-//				}
-			}
+				else if ( passMode == PassMode.Button ) {
+					if ( p.ButtonDown != null && p.ButtonDown == holdingPlayer.ButtonDown && !p.IsDead ) {
+						p.PassBallOn();
+					}
+				}
+			} 
 		}
 
-		passablePlayers.Sort( (p1,p2) => (int)(p2.TimeInOrientation - p1.TimeInOrientation) ); // if P2 has more time, it "less than" P1 meaning it comes first
-
-		playerCycle = GetRandomizedPlayers();
-		playerCycle.Remove(holdingPlayer);
-
-		for ( int i=passablePlayers.Count-1; i>=0; i-- ) {
-			Player p = passablePlayers[i];
-			playerCycle.Remove(p);
-			playerCycle.Insert(0, p);
-			playerCycleLengthOverride[p] = cyclePassLength;
-		}
-
-		playerCycleIdx = 0; 
-		playerCycleCount = 0;
-		CycleBall(false);
+		passTimeoutRoutine = WaitAndTimeoutPass(passCatchTimeout);
+		StartCoroutine(passTimeoutRoutine);
 
 		lastHoldingPlayer = holdingPlayer;
 		holdingPlayer = null;
@@ -338,8 +385,36 @@ public class Game : MonoBehaviour {
 		audioSource.PlayOneShot(sounds.PassSound);
 	}
 
+	IEnumerator WaitAndTimeoutPass(float seconds) {
+		yield return new WaitForSeconds(seconds);
+		passTimeoutRoutine = null;
+
+		foreach ( Player p in players ) {
+			p.PassBallOff();
+		}
+
+		playerCycle = GetRandomizedPlayers();
+		playerCycle.Remove(lastHoldingPlayer);
+		
+		playerCycleIdx = 0;
+		playerCycleCount = 0;
+		CycleBall(false);
+	}
+
 	void OnPlayerCatch(Player player) {
+		bool fromPass = false;
+		bool changedTeam = false;
+
 		if ( ballCycleRoutine != null ) StopCoroutine(ballCycleRoutine);
+		if ( passTimeoutRoutine != null ) {
+			StopCoroutine(passTimeoutRoutine);
+			passTimeoutRoutine = null;
+
+			fromPass = true;
+			foreach ( Player p in players ) {
+				p.PassBallOff();
+			}
+		}
 
 		holdingPlayer = player;
 
@@ -351,6 +426,7 @@ public class Game : MonoBehaviour {
 			crowd.Poke();
 		} else {
 			currentScoreLength = scoreLength;
+			changedTeam = true;
 
 			crowd.Reset();
 			crowd.Poke();
@@ -359,14 +435,22 @@ public class Game : MonoBehaviour {
 		Score(0);
 
 		scoreAudioSource.pitch = 1f;
-		audioSource.PlayOneShot(playerCycleCurrentlyOnPass ? sounds.CatchPassSound : sounds.CatchFumbleSound);
+		if ( fromPass ) {
+			audioSource.PlayOneShot(sounds.CatchPassSound);
+			if ( changedTeam ) {
+				announcer.PlayInterception();
+			} else {
+				announcer.PlayPass();
+			}
+		} else {
+			audioSource.PlayOneShot(sounds.CatchFumbleSound);
+		}
 	}
 
 	void CycleBall(bool advance) {
 		if ( advance ) {
 			Player playerOff = playerCycle[playerCycleIdx];
 			playerOff.CycleBallOff();
-
 			playerCycleIdx++;
 			if ( playerCycleIdx == playerCycle.Count ) {
 				playerCycleIdx = 0;
@@ -374,18 +458,29 @@ public class Game : MonoBehaviour {
 			}
 		}
 
-		Player playerOn = playerCycle[playerCycleIdx];
-		playerOn.CycleBallOn();
+		bool everyoneDead = true;
+		foreach ( Player p in playerCycle ) {
+			everyoneDead = everyoneDead && p.IsDead;
+		}
+
+		if ( !everyoneDead ) {
+			Player playerOn = null;
+			while ( playerOn == null ) {
+				if ( playerCycleIdx == playerCycle.Count ) {
+					playerCycleIdx = 0;
+					playerCycleCount++;
+				}
+				playerOn = playerCycle[playerCycleIdx];
+				if ( playerOn.IsDead ) {
+					playerOn = null;
+					playerCycleIdx++;
+				}
+			}
+		
+			playerOn.CycleBallOn();
+		} 
 
 		float length = cycleStartLength + playerCycleCount*cycleIncreaseLength;
-
-		if ( playerCycleLengthOverride != null && playerCycleLengthOverride.ContainsKey(playerOn) ) {
-			length = playerCycleLengthOverride[playerOn];
-			playerCycleLengthOverride.Remove(playerOn);
-			playerCycleCurrentlyOnPass = true;
-		} else {
-			playerCycleCurrentlyOnPass = false;
-		}
 
 		ballCycleRoutine = WaitAndCycleBall(length);
 		StartCoroutine(ballCycleRoutine);

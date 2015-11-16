@@ -46,6 +46,7 @@
 	</Reference>
   </ItemGroup>
   <ItemGroup>
+     <Compile Include="Assets\Scripts\Announcer.cs" />
      <Compile Include="Assets\Scripts\Board.cs" />
      <Compile Include="Assets\Scripts\Crowd.cs" />
      <Compile Include="Assets\Scripts\DrumKit.cs" />

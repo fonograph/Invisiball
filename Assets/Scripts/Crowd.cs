@@ -38,6 +38,11 @@ public class Crowd : MonoBehaviour {
 		hypeSource.Stop();
 	}
 
+	public IEnumerator WaitAndDeactivate(float seconds) {
+		yield return new WaitForSeconds(seconds);
+		Deactivate();
+	}
+
 	[EditorButtonAttribute()]
 	public void Intensify() {
 		if ( hypeSource.volume == 0 ) {

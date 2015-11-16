@@ -14,22 +14,30 @@ public class Player : MonoBehaviour {
 	private bool hasBall;
 	private DateTime hasBallStart;
 	private bool hasCycle;
+	private bool hasPass;
 	private bool readyToCatch;
 	private bool startedPass;
 	private bool startedFumble;
 	private Vector3 lastAccel = Vector3.zero;
+	private Vector3 registeredOrientation;
+	private bool dead;
+	private PSMoveButton? buttonDown;
+	private DateTime? buttonDownStart;
 	private IEnumerator setLEDRoutine;
 	private IEnumerator setRumbleRoutine;
-
-	private Vector3 registeredOrientation;
-	private DateTime registeredOrientationStart;
 
 	public event Action<Player> FumbleEvent;
 	public event Action<Player> PassEvent;
 	public event Action<Player> CatchEvent;
 
-	public double TimeInOrientation {
-		get { return DateTime.Now.Subtract(registeredOrientationStart).TotalMilliseconds; }
+	public bool IsFlat {
+		get { return Mathf.Abs(controllerObj.transform.forward.z) < Game.Instance.flatnessThreshold; }
+	}
+	public bool IsDead {
+		get { return dead; }
+	}
+	public PSMoveButton? ButtonDown {
+		get { return buttonDown; }
 	}
 
 	void Awake() {
@@ -45,15 +53,50 @@ public class Player : MonoBehaviour {
 
 	// Update is called once per frame
 	void Update () {
+
 		if ( controllerObj != null )
 			controllerObj.transform.localRotation = controller.Orientation;
+		
+		// Button presses
+		if ( controller.GetButtonDown(PSMoveButton.Circle) ) {
+			buttonDown = PSMoveButton.Circle;
+			buttonDownStart = DateTime.Now;
+		}
+		if ( controller.GetButtonDown(PSMoveButton.Square) ) {
+			buttonDown = PSMoveButton.Square;
+			buttonDownStart = DateTime.Now;
+		}
+		if ( controller.GetButtonDown(PSMoveButton.Cross) ) {
+			buttonDown = PSMoveButton.Cross;
+			buttonDownStart = DateTime.Now;
+		}
+		if ( controller.GetButtonDown(PSMoveButton.Triangle) ) {
+			buttonDown = PSMoveButton.Triangle;
+			buttonDownStart = DateTime.Now;
+		}
+		if ( controller.GetButtonUp(PSMoveButton.Circle) && buttonDown == PSMoveButton.Circle ) {
+			buttonDown = null;
+			buttonDownStart = null;
+		}
+		if ( controller.GetButtonUp(PSMoveButton.Square) && buttonDown == PSMoveButton.Square ) {
+			buttonDown = null;
+			buttonDownStart = null;
+		}
+		if ( controller.GetButtonUp(PSMoveButton.Cross) && buttonDown == PSMoveButton.Cross ) {
+			buttonDown = null;
+			buttonDownStart = null;
+		}
+		if ( controller.GetButtonUp(PSMoveButton.Triangle) && buttonDown == PSMoveButton.Triangle ) {
+			buttonDown = null;
+			buttonDownStart = null;
+		}
 
 		if ( !inGame ) 
 			return;
 
 		// CATCHING
 		// you need to press the trigger WHILE you have the cycle
-		if ( hasCycle ) {
+		if ( hasCycle || hasPass ) {
 			if ( controller.Trigger == 0 ) {
 				readyToCatch = true;
 			}
@@ -65,10 +108,23 @@ public class Player : MonoBehaviour {
 		// PASSING
 		// you let go of the trigger, and then you have an amount of time to position yourself, and the pass fires
 		if ( hasBall && !startedPass && controller.Trigger == 0 ) {
-			Debug.Log ("passed");
-			Invoke("PassBall", Game.Instance.passLength);
-			CancelInvoke("FumbleBall");
-			startedPass = true;
+			if ( Game.Instance.passMode == Game.PassMode.Button && buttonDown == null ) {
+				// no button in button mode equals a fumble
+				FumbleBall();
+				CancelInvoke("FumbleBall");
+			}
+			else {
+				startedPass = true;
+				CancelInvoke("FumbleBall");
+				Invoke("FumbleBall", Game.Instance.passLength); // time out on completing the pass
+			}
+		}
+		else if ( hasBall && startedPass ) {
+			// sufficient thrust
+			if ( (controller.Acceleration-lastAccel).magnitude > Game.Instance.passAccelThreshold && IsFlat ) {
+				CancelInvoke("FumbleBall");
+				PassBall();
+			}
 		}
 
 		// FUMBLING
@@ -102,21 +158,24 @@ public class Player : MonoBehaviour {
 
 		}
 
-		// while we don't have the ball, register orientation changes for the sake of receiving passes
+		// NO BALL DEATHS
 		if ( !hasBall ) {
-			Vector3 diff = normalizedOrientationDifference(normalizedOrientation(controller.Orientation.eulerAngles), normalizedOrientation(registeredOrientation));
-			Vector2 diff2 = new Vector2(diff.x, diff.y);
-			if ( diff2.magnitude > Game.Instance.orientationSamenessThreshold ) {
-				registeredOrientation = normalizedOrientation(controller.Orientation.eulerAngles);
-				registeredOrientationStart = DateTime.Now;
+			if ( Game.Instance.passMode == Game.PassMode.Button ) {
+				// if you don't have the ball and you hold down a button for a while kill you
+				if ( buttonDown != null && DateTime.Now.Subtract((DateTime)buttonDownStart).TotalSeconds > Game.Instance.buttonDeathTimeout ) {
+					Die();
+				}
+			}
+			// if you try to catch while you can't, kill you
+			if ( !hasCycle && !hasPass && controller.Trigger > 0 ) {
+				Die ();
 			}
 		}
 
 		lastAccel = controller.Acceleration;
 
-
-		
 		// DEBUG
+
 		
 		//		if ( hasBall ) {
 		//			Debug.Log(controller.Orientation.eulerAngles);
@@ -126,6 +185,7 @@ public class Player : MonoBehaviour {
 		//		if ( Game.Instance.HoldingPlayer != null && Game.Instance.HoldingPlayer != this ) {
 		//			Debug.Log (Game.Instance.HoldingPlayer.GetOrientationDifference(this));
 		//		}
+
 	}
 
 	public void SetTeam(int theTeam) {
@@ -166,12 +226,30 @@ public class Player : MonoBehaviour {
 		hasCycle = false;
 	}
 
+	public void PassBallOn() {
+		if ( Game.Instance.passMode == Game.PassMode.Button ) {
+			SetLED(Game.Instance.CycleColor);
+			SetRumble(0.3f);
+			SetRumble(0, 0.3f);
+		}
+		hasPass = true;
+		readyToCatch = false;
+	}
+
+	public void PassBallOff() {
+		if ( Game.Instance.passMode == Game.PassMode.Button ) {
+			SetLED(defaultColor);
+		}
+		hasPass = false;
+	}
+
 	public void GainBall() {
 //		SetLED(Game.Instance.BallColor);
 		Flash(Game.Instance.BallColor, defaultColor);
 		hasBall = true;
 		hasBallStart = DateTime.Now;
 		hasCycle = false;
+		hasPass = false;
 		startedPass = false;
 		startedFumble = false;
 		registeredOrientation = normalizedOrientation(controller.Orientation.eulerAngles);
@@ -193,10 +271,10 @@ public class Player : MonoBehaviour {
 	// INTERNAL EVENTS
 
 	public void CatchBall() {
-		GainBall();
 		SetRumble(0.5f);
 		SetRumble(0, 0.3f);
 		CatchEvent(this);
+		GainBall();
 	}
 
 	public void PassBall() {
@@ -209,6 +287,18 @@ public class Player : MonoBehaviour {
 		SetRumble(1);
 		SetRumble(0, 0.5f);
 		FumbleEvent(this);
+	}
+
+	public void Die() {
+		dead = true;
+		SetLED(Color.black);
+		StartCoroutine(Revive());
+	}
+	
+	public IEnumerator Revive() {
+		yield return new WaitForSeconds(Game.Instance.deathLength);
+		SetLED(defaultColor);
+		dead = false;
 	}
 
 	// MISC
