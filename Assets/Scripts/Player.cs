@@ -108,7 +108,10 @@ public class Player : MonoBehaviour {
 		// PASSING
 		// you let go of the trigger, and then you have an amount of time to position yourself, and the pass fires
 		if ( hasBall && !startedPass && controller.Trigger == 0 ) {
-			if ( Game.Instance.passMode == Game.PassMode.Button && buttonDown == null ) {
+			if ( Game.Instance.passMode == Game.PassMode.Simple ) {
+				PassBall();
+			}
+			else if ( Game.Instance.passMode == Game.PassMode.Button && buttonDown == null ) {
 				// no button in button mode equals a fumble
 				FumbleBall();
 				CancelInvoke("FumbleBall");
@@ -152,8 +155,13 @@ public class Player : MonoBehaviour {
 			}
 
 			if ( fumbled ) {
-				Invoke("FumbleBall", Game.Instance.passMargin); // we delay the fumble, because if a pass begins in this time we'll call it a pass instead
-				startedFumble = true;
+				if ( Game.Instance.passMode == Game.PassMode.Simple ) {
+					FumbleBall();
+				}
+				else {
+					Invoke("FumbleBall", Game.Instance.passMargin); // we delay the fumble, because if a pass begins in this time we'll call it a pass instead
+					startedFumble = true;
+				}
 			}
 
 		}
@@ -162,7 +170,7 @@ public class Player : MonoBehaviour {
 		if ( !hasBall ) {
 			if ( Game.Instance.passMode == Game.PassMode.Button ) {
 				// if you don't have the ball and you hold down a button for a while kill you
-				if ( buttonDown != null && DateTime.Now.Subtract((DateTime)buttonDownStart).TotalSeconds > Game.Instance.buttonDeathTimeout ) {
+				if ( Game.Instance.passMode == Game.PassMode.Button && buttonDown != null && DateTime.Now.Subtract((DateTime)buttonDownStart).TotalSeconds > Game.Instance.buttonDeathTimeout ) {
 					Die();
 				}
 			}
@@ -227,19 +235,19 @@ public class Player : MonoBehaviour {
 	}
 
 	public void PassBallOn() {
-		if ( Game.Instance.passMode == Game.PassMode.Button ) {
+		// if ( Game.Instance.passMode == Game.PassMode.Button ) {
 			SetLED(Game.Instance.CycleColor);
 			SetRumble(0.3f);
 			SetRumble(0, 0.3f);
-		}
+		// }
 		hasPass = true;
 		readyToCatch = false;
 	}
 
 	public void PassBallOff() {
-		if ( Game.Instance.passMode == Game.PassMode.Button ) {
+		// if ( Game.Instance.passMode == Game.PassMode.Button ) {
 			SetLED(defaultColor);
-		}
+		// }
 		hasPass = false;
 	}
 

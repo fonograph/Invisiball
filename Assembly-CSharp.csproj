@@ -48,6 +48,7 @@
   <ItemGroup>
      <Compile Include="Assets\Scripts\Announcer.cs" />
      <Compile Include="Assets\Scripts\Board.cs" />
+     <Compile Include="Assets\Scripts\Config.cs" />
      <Compile Include="Assets\Scripts\Crowd.cs" />
      <Compile Include="Assets\Scripts\DrumKit.cs" />
      <Compile Include="Assets\Scripts\EditorButton.cs" />
@@ -57,6 +58,7 @@
      <Compile Include="Assets\UniMove\Code\MoveController.cs" />
      <Compile Include="Assets\UniMove\Code\UniMoveController.cs" />
      <Compile Include="Assets\UniMove\Code\UniMoveTest.cs" />
+     <None Include="Assets\StreamingAssets\config.xml" />
      <None Include="Assets\PlayModePersist\readme.txt" />
      <None Include="Assets\Plugins\Pixelplacement\iTween\ReadMe!\ReadMe!.txt" />
  <Reference Include="UnityEngine.UI">

@@ -50,6 +50,7 @@
      <Compile Include="Assets\Plugins\Pixelplacement\iTween\Sample\RotateSample.cs" />
      <Compile Include="Assets\Plugins\Pixelplacement\iTween\Sample\SampleInfo.cs" />
      <Compile Include="Assets\Plugins\Pixelplacement\iTween\iTween.cs" />
+     <None Include="Assets\StreamingAssets\config.xml" />
      <None Include="Assets\PlayModePersist\readme.txt" />
      <None Include="Assets\Plugins\Pixelplacement\iTween\ReadMe!\ReadMe!.txt" />
  <Reference Include="UnityEngine.UI">

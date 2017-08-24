@@ -58,6 +58,7 @@
      <Compile Include="Assets\PlayModePersist\Editor\PPGOSetting.cs" />
      <Compile Include="Assets\PlayModePersist\Editor\PPLocalStorageManager.cs" />
      <Compile Include="Assets\PlayModePersist\Editor\PPMenuOptions.cs" />
+     <None Include="Assets\StreamingAssets\config.xml" />
      <None Include="Assets\PlayModePersist\readme.txt" />
      <None Include="Assets\Plugins\Pixelplacement\iTween\ReadMe!\ReadMe!.txt" />
  <Reference Include="UnityEditor.Advertisements">

@@ -4,11 +4,12 @@ using System;
 using System.Threading;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine.Audio;
 
 public class Game : MonoBehaviour {
 
 	public enum Phase { Connecting, Waiting, Playing, Ended };
-	public enum PassMode { Imaginary, Button }
+	public enum PassMode { Simple, Imaginary, Button }
 
 	public Player playerPrefab;
 	public Text scoreText1;
@@ -42,6 +43,8 @@ public class Game : MonoBehaviour {
 	public PassMode passMode;
 	public bool enableAnnouncer;
 
+	public AudioMixer audioMixer;
+
 	public static Game Instance;
 
 	private Board board;
@@ -62,6 +65,7 @@ public class Game : MonoBehaviour {
 	private List<Player> playerCycle;
 	private int playerCycleIdx;
 	private int playerCycleCount;
+	private bool playerCycleStartedAfterPass; 
 	private float currentScoreLength;
 	private List<int> playedCountdownSounds;
 
@@ -84,6 +88,26 @@ public class Game : MonoBehaviour {
 	}
 
 	void Start() {
+		#if !UNITY_EDITOR 
+			Config config = Config.Load();
+			gameLength = config.gameLength;
+			accelTolerance = config.accelTolerance;
+			gyroTolerance = config.gyroTolerance;
+			scoreLength = config.scoreLength;
+			scoreDecreaseLengthBonus = config.scoreDecreaseLengthBonus;
+			cycleStartLength = config.cycleStartLength;
+			cycleIncreaseLength = config.cycleIncreaseLength;
+			catchMargin = config.catchMargin;
+			passCatchTimeout = config.passCatchTimeout;
+			deathLength = config.deathLength;
+			suppressFumble = config.suppressFumble;
+			enableAnnouncer = config.enableAnnouncer;
+			
+			audioMixer.SetFloat("announcerVolume", config.volumeAnnouncer);
+			audioMixer.SetFloat("crowdVolume", config.volumeCrowd);
+			audioMixer.SetFloat("sfxVolume", config.volumeSfx);
+		#endif
+
 		players = new List<Player>();
 
 		scores = new Dictionary<int, int>();
@@ -274,6 +298,7 @@ public class Game : MonoBehaviour {
 		
 		playerCycleIdx = 0;
 		playerCycleCount = 0;
+		playerCycleStartedAfterPass = false;
 
 		announcer.isEnabled = !isPractice && enableAnnouncer;
 
@@ -347,6 +372,8 @@ public class Game : MonoBehaviour {
 
 		playerCycleIdx = 0;
 		playerCycleCount = 0;
+		playerCycleStartedAfterPass = false;
+
 		CycleBall(false);
 
 		lastHoldingPlayer = holdingPlayer;
@@ -361,7 +388,7 @@ public class Game : MonoBehaviour {
 	void OnPlayerPass(Player player) {
 		if ( scoreRoutine != null ) StopCoroutine(scoreRoutine);
 
-		foreach ( Player p in players ) {
+		foreach ( Player p in GetRandomizedPlayers() ) {
 			if ( p != holdingPlayer ) {
 				if ( passMode == PassMode.Imaginary ) {
 					if ( p.IsFlat && !p.IsDead ) {
@@ -371,6 +398,12 @@ public class Game : MonoBehaviour {
 				else if ( passMode == PassMode.Button ) {
 					if ( p.ButtonDown != null && p.ButtonDown == holdingPlayer.ButtonDown && !p.IsDead ) {
 						p.PassBallOn();
+					}
+				}
+				else if ( passMode == PassMode.Simple ) {
+					if ( p.team == holdingPlayer.team ) {
+						p.PassBallOn();
+						break;
 					}
 				}
 			} 
@@ -398,6 +431,7 @@ public class Game : MonoBehaviour {
 		
 		playerCycleIdx = 0;
 		playerCycleCount = 0;
+		playerCycleStartedAfterPass = true;
 		CycleBall(false);
 	}
 
@@ -442,7 +476,11 @@ public class Game : MonoBehaviour {
 			} else {
 				announcer.PlayPass();
 			}
-		} else {
+		} 
+		else {
+			if ( playerCycleStartedAfterPass && changedTeam ) {
+				announcer.PlayInterception(); // call it an "interception" when it changed team after a failed pass, even if it cycled first
+			}
 			audioSource.PlayOneShot(sounds.CatchFumbleSound);
 		}
 	}
@@ -533,3 +571,4 @@ public class Game : MonoBehaviour {
 	}
 
 }
+

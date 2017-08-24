@@ -1,0 +1,17 @@
+<Config>
+	<gameLength>130</gameLength>
+	<accelTolerance>0.5</accelTolerance>
+	<gyroTolerance>100</gyroTolerance>
+	<scoreLength>1</scoreLength>
+	<scoreDecreaseLengthBonus>0.1</scoreDecreaseLengthBonus>
+	<cycleStartLength>0.4</cycleStartLength>
+	<cycleIncreaseLength>0.2</cycleIncreaseLength>
+	<catchMargin>1</catchMargin>
+	<passCatchTimeout>1</passCatchTimeout>
+	<deathLength>3</deathLength>
+	<suppressFumble>false</suppressFumble>
+	<enableAnnouncer>true</enableAnnouncer>
+	<volumeAnnouncer>-5.32</volumeAnnouncer>
+	<volumeCrowd>0</volumeCrowd>
+	<volumeSfx>4.17</volumeSfx>
+</Config>
